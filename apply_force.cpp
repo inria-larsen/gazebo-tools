@@ -1,5 +1,7 @@
 /* 
  * This example shows how to interact with gazebo (eg. using the 'selection' message)
+ * A force (a bottle containing 3 double) is expected on /portForces:i and then sent
+ * continuously to the selected link in gazebo.
  */
 
 #include <cmath>
@@ -61,18 +63,6 @@ public:
         node->Init();
         // Subscribe to selection to know whre to apply force
         sub=node->Subscribe("~/selection",&ApplyForce::cbGzSelection,this);
-//         std::string link="~/iCub/chest/wrench";
-//         pub=node->Advertise<gazebo::msgs::Wrench>(link);
-//         gazebo::msgs::Wrench msg;
-//         gazebo::msgs::Set(msg.mutable_force(),ignition::math::Vector3d(10000,100000,10000));
-//         gazebo::msgs::Set(msg.mutable_torque(),ignition::math::Vector3d(0,0,0));
-    //  gazebo::msgs::Set(msg.mutable_force_offset(),ignition::math::Vector3d(0.002,0.075,-0));
-//         gazebo::msgs::Set(msg.mutable_force_offset(),ignition::math::Vector3d(0.0,0.0,-0));
-
-//         pub->WaitForConnection();
-//         std::cout << "connected !" << std::endl;
-//         pub->Publish(msg,true);
-//         gazebo::common::Time::MSleep(100);
         return true;
     }
     
@@ -94,8 +84,8 @@ public:
       Bottle *b = force_port.read(false);
       if (b!=NULL) {
         // TODO use  vector,
-//         // TODO check size and type
-          // data received in *b
+        // TODO check size and type
+      
         double x=b->get(0).asDouble();
         double y=b->get(1).asDouble();
         double z=b->get(2).asDouble();
@@ -108,7 +98,7 @@ public:
         if ((link!="") && (link!=old_link))
         {
           // create new pub if new link and not empty link
-//           td::string link="~/iCub/chest/wrench";
+          // TODO clean old pub ! 
           pub=node->Advertise<gazebo::msgs::Wrench>(link);
           
           pub->WaitForConnection();
@@ -159,36 +149,6 @@ public:
           mx.unlock();
         }
       }
-      // TODO: better name, it can be icub_0::l_forearm or similar if robot is removed and replaced in gazebo...
-      // for now we only check if something called *::(l|r)_forearm is selected.
-//       yInfo(_msg->name());
-      
-//       std::size_t sep=_msg->name().rfind("::");
-      /*
-      if (sep!=string::npos)
-      {              
-      
-        if (_msg->selected() && (!_msg->name().compare(sep+2,string::npos,"l_forearm")))
-        {
-            mx.lock();
-            selected_part=&client_left;
-            mx.unlock();
-            yInfo("now moving %s",_msg->name().c_str());
-        }
-        else if (_msg->selected() && (!_msg->name().compare(sep+2,string::npos,"r_forearm")))
-        {
-            mx.lock();
-            selected_part=&client_right;
-            mx.unlock();
-            yInfo("now moving %s",_msg->name().c_str());
-        }
-        else
-        {
-          mx.lock();
-          selected_part=nullptr;
-          mx.unlock();
-        }
-      }*/
     }
 };
 
