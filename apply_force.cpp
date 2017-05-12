@@ -37,7 +37,8 @@ protected:
     boost::mutex mx;
     std::string current_link;
     ignition::math::Vector3d current_force;
-    
+    BufferedPort<Bottle> force_port;
+
 public:
     ApplyForce(): RFModule(), current_link(""), current_force(0,0,0)
     {
@@ -47,8 +48,10 @@ public:
     bool configure(ResourceFinder &rf)
     {    
         string name=rf.check("name",Value("apply_force")).asString().c_str();
+        force_port.open("/portForces:i");
         return true;
     }
+    
     bool init_gazebo()
     {
         yInfo("Trying to connect to gazebo...");
@@ -88,7 +91,17 @@ public:
       std::string link="";
       static std::string old_link="";
       gazebo::msgs::Wrench msg;
-      
+      Bottle *b = force_port.read(false);
+      if (b!=NULL) {
+        // TODO use  vector,
+//         // TODO check size and type
+          // data received in *b
+        double x=b->get(0).asDouble();
+        double y=b->get(1).asDouble();
+        double z=b->get(2).asDouble();
+        current_force=ignition::math::Vector3d(x,y,z);
+        yInfo("New force %f %f %f",x,y,z);
+      }      
         mx.lock();
         link=current_link;
         mx.unlock();
@@ -105,7 +118,7 @@ public:
         
         if (old_link!="")
         {
-          gazebo::msgs::Set(msg.mutable_force(),ignition::math::Vector3d(1000,1000,1000));
+          gazebo::msgs::Set(msg.mutable_force(),current_force);
           gazebo::msgs::Set(msg.mutable_torque(),ignition::math::Vector3d(0,0,0));
           gazebo::msgs::Set(msg.mutable_force_offset(),ignition::math::Vector3d(0.0,0.0,-0));
           pub->Publish(msg,true);
@@ -190,7 +203,7 @@ int main(int argc,char *argv[])
 
     ResourceFinder rf;
     rf.configure(argc,argv);
-  
+
     ApplyForce af;
     af.init_gazebo();
     yInfo("OK, will now run YARP module");
