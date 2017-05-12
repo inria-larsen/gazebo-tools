@@ -3,12 +3,6 @@
  * A force (a bottle containing 3 double) is expected on /portForces:i and then sent
  * continuously to the selected link in gazebo.
  */
-
-#include <cmath>
-#include <string>
-#include <algorithm>
-#include <map>
-
 #include <yarp/os/all.h>
 #include <yarp/dev/all.h>
 #include <yarp/sig/all.h>
@@ -20,9 +14,6 @@
 
 #include <boost/thread/mutex.hpp>
 #include <boost/algorithm/string/replace.hpp>
-
-#define DEG2RAD     (M_PI/180.0)
-#define RAD2DEG     (180.0/M_PI)
 
 using namespace std;
 using namespace yarp::os;
