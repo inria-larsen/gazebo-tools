@@ -17,6 +17,7 @@
 #include <gazebo/gazebo_client.hh>
 
 #include <boost/thread/mutex.hpp>
+#include <boost/algorithm/string/replace.hpp>
 
 #define DEG2RAD     (M_PI/180.0)
 #define RAD2DEG     (180.0/M_PI)
@@ -34,8 +35,11 @@ protected:
     gazebo::transport::PublisherPtr pub;
     gazebo::transport::SubscriberPtr sub;
     boost::mutex mx;
+    std::string current_link;
+    ignition::math::Vector3d current_force;
+    
 public:
-    ApplyForce(): RFModule()
+    ApplyForce(): RFModule(), current_link(""), current_force(0,0,0)
     {
       
     }
@@ -47,27 +51,28 @@ public:
     }
     bool init_gazebo()
     {
-              yInfo("Trying to connect to gazebo...");
+        yInfo("Trying to connect to gazebo...");
     
-    gazebo::client::setup();
-    node=gazebo::transport::NodePtr(new gazebo::transport::Node());
-    node->Init();
-    // Subscribe to selection to know whre to apply force
-    sub=node->Subscribe("~/selection",&ApplyForce::cbGzSelection,this);
-    std::string link="~/iCub/chest/wrench";
-    pub=node->Advertise<gazebo::msgs::Wrench>(link);
-    gazebo::msgs::Wrench msg;
-    gazebo::msgs::Set(msg.mutable_force(),ignition::math::Vector3d(10000,100000,10000));
-    gazebo::msgs::Set(msg.mutable_torque(),ignition::math::Vector3d(0,0,0));
-//  gazebo::msgs::Set(msg.mutable_force_offset(),ignition::math::Vector3d(0.002,0.075,-0));
-    gazebo::msgs::Set(msg.mutable_force_offset(),ignition::math::Vector3d(0.0,0.0,-0));
+        gazebo::client::setup();
+        node=gazebo::transport::NodePtr(new gazebo::transport::Node());
+        node->Init();
+        // Subscribe to selection to know whre to apply force
+        sub=node->Subscribe("~/selection",&ApplyForce::cbGzSelection,this);
+//         std::string link="~/iCub/chest/wrench";
+//         pub=node->Advertise<gazebo::msgs::Wrench>(link);
+//         gazebo::msgs::Wrench msg;
+//         gazebo::msgs::Set(msg.mutable_force(),ignition::math::Vector3d(10000,100000,10000));
+//         gazebo::msgs::Set(msg.mutable_torque(),ignition::math::Vector3d(0,0,0));
+    //  gazebo::msgs::Set(msg.mutable_force_offset(),ignition::math::Vector3d(0.002,0.075,-0));
+//         gazebo::msgs::Set(msg.mutable_force_offset(),ignition::math::Vector3d(0.0,0.0,-0));
 
-    pub->WaitForConnection();
-    std::cout << "connected !" << std::endl;
-    pub->Publish(msg,true);
-    gazebo::common::Time::MSleep(100);
-
+//         pub->WaitForConnection();
+//         std::cout << "connected !" << std::endl;
+//         pub->Publish(msg,true);
+//         gazebo::common::Time::MSleep(100);
+        return true;
     }
+    
     bool close()
     {
       return true;
@@ -80,27 +85,72 @@ public:
 
     bool updateModule()
     {         
+      std::string link="";
+      static std::string old_link="";
+      gazebo::msgs::Wrench msg;
       
-//       yInfo("plop");
-//       msgs::Wrench msg;
-//       pub->Publish(msg);
-
         mx.lock();
-//         if (selected_part!=NULL)
-        {          
-        }
+        link=current_link;
         mx.unlock();
+        if ((link!="") && (link!=old_link))
+        {
+          // create new pub if new link and not empty link
+//           td::string link="~/iCub/chest/wrench";
+          pub=node->Advertise<gazebo::msgs::Wrench>(link);
+          
+          pub->WaitForConnection();
+          yInfo("new link connected !");
+          old_link=link;
+        }
+        
+        if (old_link!="")
+        {
+          gazebo::msgs::Set(msg.mutable_force(),ignition::math::Vector3d(1000,1000,1000));
+          gazebo::msgs::Set(msg.mutable_torque(),ignition::math::Vector3d(0,0,0));
+          gazebo::msgs::Set(msg.mutable_force_offset(),ignition::math::Vector3d(0.0,0.0,-0));
+          pub->Publish(msg,true);
+        }
+        
         return true;
     }
     
     void cbGzSelection(ConstSelectionPtr &_msg)
     // Gazebo callback, called when a new selection is made
     {     
+      
+      if (_msg->selected()==false)
+      {
+        mx.lock();
+        current_link="";
+        mx.unlock();
+        return;
+      }
+      else
+      {  
+        std::size_t sep=_msg->name().rfind("::");
+      
+        if (sep!=string::npos)
+        {
+          mx.lock();
+          current_link=_msg->name();
+          boost::replace_all(current_link, "::", "/");
+          current_link="~/"+current_link+"/wrench";
+          mx.unlock();
+          std::cout << "current_link: "<< current_link << std::endl;
+        }
+        else
+        {
+          // don't know what to do here: the whole robot is selected, need a link instead...
+          mx.lock();
+          current_link="";
+          mx.unlock();
+        }
+      }
       // TODO: better name, it can be icub_0::l_forearm or similar if robot is removed and replaced in gazebo...
       // for now we only check if something called *::(l|r)_forearm is selected.
-      yInfo(_msg->name());
+//       yInfo(_msg->name());
       
-      std::size_t sep=_msg->name().rfind("::");
+//       std::size_t sep=_msg->name().rfind("::");
       /*
       if (sep!=string::npos)
       {              
