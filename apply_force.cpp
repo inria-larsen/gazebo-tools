@@ -26,7 +26,8 @@ class ApplyForce: public RFModule
 protected:
     gazebo::transport::NodePtr node;
     gazebo::transport::PublisherPtr pub;
-    gazebo::transport::SubscriberPtr sub;
+    gazebo::transport::SubscriberPtr sub_sel;
+    gazebo::transport::SubscriberPtr sub_pose;
     boost::mutex mx;
     std::string current_link;
     ignition::math::Vector3d current_force;
@@ -53,7 +54,9 @@ public:
         node=gazebo::transport::NodePtr(new gazebo::transport::Node());
         node->Init();
         // Subscribe to selection to know whre to apply force
-        sub=node->Subscribe("~/selection",&ApplyForce::cbGzSelection,this);
+        sub_sel=node->Subscribe("~/selection",&ApplyForce::cbGzSelection,this);
+        // Subscribe to pose (TODO: or pose local ???)
+        sub_pose=node->Subscribe("~/pose",&ApplyForce::cbGzPose,this);
         return true;
     }
     
@@ -140,6 +143,10 @@ public:
           mx.unlock();
         }
       }
+    }
+    void cbGzPose(ConstPosePtr &_msg)
+    // Gazebo callback, called when a new pose is available
+    {     
     }
 };
 
