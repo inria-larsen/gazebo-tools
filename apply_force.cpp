@@ -24,24 +24,27 @@ using namespace yarp::math;
 class ApplyForce: public RFModule
 {
 protected:
+    std::string name;
     gazebo::transport::NodePtr node;
     gazebo::transport::PublisherPtr pub;
     gazebo::transport::SubscriberPtr sub_sel;
     gazebo::transport::SubscriberPtr sub_pose;
     boost::mutex mx;
     std::string current_link;
+    std::string current_link_topic;
     ignition::math::Vector3d current_force;
     BufferedPort<Bottle> force_port;
-
+    std::map<std::string,ignition::math::Pose3<double> > current_poses;
+    
 public:
-    ApplyForce(): RFModule(), current_link(""), current_force(0,0,0)
+    ApplyForce(): RFModule(), name(""), current_link(""), current_link_topic(""), current_force(0,0,0)
     {
       
     }
     
     bool configure(ResourceFinder &rf)
     {    
-        string name=rf.check("name",Value("apply_force")).asString().c_str();
+        name=rf.check("name",Value("apply_force")).asString().c_str();
         force_port.open("/portForces:i");
         return true;
     }
@@ -56,7 +59,7 @@ public:
         // Subscribe to selection to know whre to apply force
         sub_sel=node->Subscribe("~/selection",&ApplyForce::cbGzSelection,this);
         // Subscribe to pose (TODO: or pose local ???)
-        sub_pose=node->Subscribe("~/pose",&ApplyForce::cbGzPose,this);
+        sub_pose=node->Subscribe("~/pose/info",&ApplyForce::cbGzPose,this);
         return true;
     }
     
@@ -73,6 +76,7 @@ public:
     bool updateModule()
     {         
       std::string link="";
+      std::string link_name="";
       static std::string old_link="";
       gazebo::msgs::Wrench msg;
       Bottle *b = force_port.read(false);
@@ -87,7 +91,8 @@ public:
         yInfo("New force %f %f %f",x,y,z);
       }      
         mx.lock();
-        link=current_link;
+        link=current_link_topic;
+        link_name=current_link;
         mx.unlock();
         if ((link!="") && (link!=old_link))
         {
@@ -102,10 +107,36 @@ public:
         
         if (old_link!="")
         {
-          gazebo::msgs::Set(msg.mutable_force(),current_force);
-          gazebo::msgs::Set(msg.mutable_torque(),ignition::math::Vector3d(0,0,0));
-          gazebo::msgs::Set(msg.mutable_force_offset(),ignition::math::Vector3d(0.0,0.0,-0));
-          pub->Publish(msg,true);
+          ignition::math::Pose3<double> pose,root_pose;
+          ignition::math::Quaternion<double> rot,root_rot;
+          ignition::math::Vector3d f;
+          bool pose_ok=false; // true if a known pose can be used
+          mx.lock();
+          // first find our iCub pose
+          // TODO: check name here, could be a parameter ?
+          auto found=current_poses.find("iCub");
+          if (found!=current_poses.end())
+          {
+            root_pose=found->second;
+            root_rot=root_pose.Rot();            
+            found=current_poses.find(link_name);
+            if (found!=current_poses.end())
+            {
+              pose=found->second;
+              rot=root_rot*pose.Rot();
+              f=rot.RotateVectorReverse(current_force);            
+              pose_ok=true;
+            }
+          }                    
+          mx.unlock();                    
+          
+          if (pose_ok)
+          {
+            gazebo::msgs::Set(msg.mutable_force(),f);
+            gazebo::msgs::Set(msg.mutable_torque(),ignition::math::Vector3d(0,0,0));
+            gazebo::msgs::Set(msg.mutable_force_offset(),ignition::math::Vector3d(0.0,0.0,-0));
+            pub->Publish(msg,true);
+          }
         }
         
         return true;
@@ -119,6 +150,7 @@ public:
       {
         mx.lock();
         current_link="";
+        current_link_topic="";
         mx.unlock();
         return;
       }
@@ -130,8 +162,9 @@ public:
         {
           mx.lock();
           current_link=_msg->name();
-          boost::replace_all(current_link, "::", "/");
-          current_link="~/"+current_link+"/wrench";
+          current_link_topic=current_link;
+          boost::replace_all(current_link_topic, "::", "/");
+          current_link_topic="~/"+current_link_topic+"/wrench";
           mx.unlock();
           std::cout << "current_link: "<< current_link << std::endl;
         }
@@ -139,14 +172,31 @@ public:
         {
           // don't know what to do here: the whole robot is selected, need a link instead...
           mx.lock();
+          current_link_topic="";
           current_link="";
           mx.unlock();
         }
       }
     }
-    void cbGzPose(ConstPosePtr &_msg)
+    void cbGzPose(ConstPosesStampedPtr &_msg)
     // Gazebo callback, called when a new pose is available
-    {     
+    { 
+      // TODO: clear map ?
+      mx.lock();
+      for (int i=0;i<_msg->pose_size();i++)
+      {        
+        ignition::math::Vector3d pos( _msg->pose(i).position().x(),
+                                      _msg->pose(i).position().y(),
+                                      _msg->pose(i).position().z());
+        
+        ignition::math::Quaternion<double> rot(_msg->pose(i).orientation().w(),
+                                               _msg->pose(i).orientation().x(),
+                                               _msg->pose(i).orientation().y(),
+                                               _msg->pose(i).orientation().z());
+        
+        current_poses[_msg->pose(i).name()]= ignition::math::Pose3<double>(pos,rot);
+      }
+      mx.unlock();
     }
 };
 
