@@ -88,7 +88,7 @@ public:
         double y=b->get(1).asDouble();
         double z=b->get(2).asDouble();
         current_force=ignition::math::Vector3d(x,y,z);
-        yInfo("New force %f %f %f",x,y,z);
+        yDebug("New force %f %f %f",x,y,z);
       }      
         mx.lock();
         link=current_link_topic;
@@ -165,8 +165,7 @@ public:
           current_link_topic=current_link;
           boost::replace_all(current_link_topic, "::", "/");
           current_link_topic="~/"+current_link_topic+"/wrench";
-          mx.unlock();
-          std::cout << "current_link: "<< current_link << std::endl;
+          mx.unlock();          
         }
         else
         {
